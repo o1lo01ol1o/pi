@@ -4,7 +4,7 @@
 
 ### Fixed
 
-- Fixed `pi update --self` for flake installs in Nix profiles to upgrade the owning `nix profile` entry instead of trying to write into the Nix store.
+- Fixed `pi update --self` for remote flake installs in Nix profiles to upgrade the owning `nix profile` entry instead of trying to write into the Nix store, while local path-flake installs now explain that the local source must be updated first.
 - Fixed `pi uninstall`/`pi remove` for npm packages to avoid starting project-trust extensions during global removal and to use peer-relaxed package-manager flags, avoiding failures caused by unrelated stale peer dependencies in the managed package root.
 
 ## [0.79.6] - 2026-06-16

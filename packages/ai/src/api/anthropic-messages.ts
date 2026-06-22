@@ -36,8 +36,8 @@ import { parseJsonWithRepair, parseStreamingJson } from "../utils/json-parse.ts"
 import { getProviderEnvValue } from "../utils/provider-env.ts";
 import { retryProviderRequest } from "../utils/provider-retry.ts";
 import { sanitizeSurrogates } from "../utils/sanitize-unicode.ts";
-
 import { resolveJsonSchemaStrictSampling } from "./constrained-sampling.ts";
+import { applyFireworksPromptCacheUsage, parseFireworksPromptCacheUsage } from "./fireworks-prompt-cache.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { adjustMaxTokensForThinking, buildBaseOptions, clampMaxTokensToContext } from "./simple-options.ts";
 import { transformMessages } from "./transform-messages.ts";
@@ -62,7 +62,7 @@ function getCacheControl(
 	env?: ProviderEnv,
 ): { retention: CacheRetention; cacheControl?: CacheControlEphemeral } {
 	const retention = resolveCacheRetention(cacheRetention, env);
-	if (retention === "none") {
+	if (retention === "none" || model.provider === "fireworks") {
 		return { retention };
 	}
 	const ttl = retention === "long" && getAnthropicCompat(model).supportsLongCacheRetention ? "1h" : undefined;
@@ -564,7 +564,10 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (
 					signal: options?.signal,
 				},
 			);
-			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
+			const responseHeaders = headersToRecord(response.headers);
+			const fireworksPromptCacheUsage =
+				model.provider === "fireworks" ? parseFireworksPromptCacheUsage(responseHeaders) : undefined;
+			await options?.onResponse?.({ status: response.status, headers: responseHeaders }, model);
 			stream.push({ type: "start", partial: output });
 
 			type Block = (ThinkingContent | TextContent | (ToolCall & { partialJson: string })) & { index: number };
@@ -584,6 +587,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (
 					output.usage.totalTokens =
 						output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 					calculateCost(model, output.usage);
+					applyFireworksPromptCacheUsage(model, output.usage, fireworksPromptCacheUsage);
 				} else if (event.type === "content_block_start") {
 					if (event.content_block.type === "text") {
 						const block: Block = {
@@ -740,6 +744,7 @@ export const stream: StreamFunction<"anthropic-messages", AnthropicOptions> = (
 					output.usage.totalTokens =
 						output.usage.input + output.usage.output + output.usage.cacheRead + output.usage.cacheWrite;
 					calculateCost(model, output.usage);
+					applyFireworksPromptCacheUsage(model, output.usage, fireworksPromptCacheUsage);
 				}
 			}
 

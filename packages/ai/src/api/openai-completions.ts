@@ -49,6 +49,7 @@ import {
 	resolveGrammarConstrainedSampling,
 	resolveJsonSchemaStrictSampling,
 } from "./constrained-sampling.ts";
+import { applyFireworksPromptCacheUsage, parseFireworksPromptCacheUsage } from "./fireworks-prompt-cache.ts";
 import { buildCopilotDynamicHeaders, hasCopilotVisionInput } from "./github-copilot-headers.ts";
 import { clampOpenAIPromptCacheKey } from "./openai-prompt-cache.ts";
 import { buildBaseOptions } from "./simple-options.ts";
@@ -247,7 +248,10 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 					signal: options?.signal,
 				},
 			);
-			await options?.onResponse?.({ status: response.status, headers: headersToRecord(response.headers) }, model);
+			const responseHeaders = headersToRecord(response.headers);
+			const fireworksPromptCacheUsage =
+				model.provider === "fireworks" ? parseFireworksPromptCacheUsage(responseHeaders) : undefined;
+			await options?.onResponse?.({ status: response.status, headers: responseHeaders }, model);
 			stream.push({ type: "start", partial: output });
 
 			interface StreamingToolCallBlock extends ToolCall {
@@ -444,7 +448,7 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 					output.responseModel ||= chunk.model;
 				}
 				if (chunk.usage) {
-					output.usage = parseChunkUsage(chunk.usage, model);
+					output.usage = parseChunkUsage(chunk.usage, model, fireworksPromptCacheUsage);
 				}
 
 				const choice = Array.isArray(chunk.choices) ? chunk.choices[0] : undefined;
@@ -453,7 +457,7 @@ export const stream: StreamFunction<"openai-completions", OpenAICompletionsOptio
 				// Fallback: some providers (e.g., Moonshot) return usage
 				// in choice.usage instead of the standard chunk.usage
 				if (!chunk.usage && (choice as any).usage) {
-					output.usage = parseChunkUsage((choice as any).usage, model);
+					output.usage = parseChunkUsage((choice as any).usage, model, fireworksPromptCacheUsage);
 				}
 
 				if (choice.finish_reason) {
@@ -1323,6 +1327,7 @@ function parseChunkUsage(
 		completion_tokens_details?: { reasoning_tokens?: number };
 	},
 	model: Model<"openai-completions">,
+	fireworksPromptCacheUsage?: ReturnType<typeof parseFireworksPromptCacheUsage>,
 ): AssistantMessage["usage"] {
 	const promptTokens = rawUsage.prompt_tokens || 0;
 	const cacheReadTokens = rawUsage.prompt_tokens_details?.cached_tokens ?? rawUsage.prompt_cache_hit_tokens ?? 0;
@@ -1349,6 +1354,7 @@ function parseChunkUsage(
 		cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 	};
 	calculateCost(model, usage);
+	applyFireworksPromptCacheUsage(model, usage, fireworksPromptCacheUsage);
 	return usage;
 }
 

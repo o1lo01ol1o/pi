@@ -74,6 +74,30 @@ describe("Fireworks models", () => {
 		expect(model.compat?.supportsCacheControlOnTools).toBe(false);
 		expect(model.compat?.supportsLongCacheRetention).toBe(false);
 	});
+
+	it("sets GLM 5.2 compat for Fireworks prompt-cache routing", () => {
+		const model = getModel("fireworks", "accounts/fireworks/models/glm-5p2");
+
+		expect(model.api).toBe("openai-completions");
+		if (model.api !== "openai-completions") {
+			throw new Error("Expected Fireworks GLM 5.2 to use the OpenAI-compatible API");
+		}
+		expect(model.baseUrl).toBe("https://api.fireworks.ai/inference/v1");
+		expect(model.compat).toBeDefined();
+		expect(model.compat?.supportsStore).toBe(false);
+		expect(model.compat?.supportsDeveloperRole).toBe(false);
+		expect(model.compat?.sendSessionAffinityHeaders).toBe(true);
+		expect(model.compat?.supportsLongCacheRetention).toBe(false);
+		expect(model.thinkingLevelMap).toEqual({
+			off: "none",
+			minimal: null,
+			low: "high",
+			medium: "high",
+			high: "high",
+			xhigh: null,
+			max: "max",
+		});
+	});
 });
 
 // --- Integration tests for Fireworks Anthropic session affinity and tool compat ---
@@ -239,6 +263,22 @@ describe("Fireworks Anthropic session affinity and tool compat", () => {
 		expect(lastTool.cache_control).toBeUndefined();
 	});
 
+	it("omits cache_control on Fireworks prompt content", async () => {
+		const model = createFireworksModel();
+		const request = await captureAnthropicRequest(model, {
+			systemPrompt: "Stable system instructions",
+			messages: [{ role: "user", content: "Dynamic request content", timestamp: Date.now() }],
+			tools: [tool],
+		});
+
+		const system = request.body.system;
+		expect(Array.isArray(system)).toBe(true);
+		expect((system as Record<string, unknown>[])[0]?.cache_control).toBeUndefined();
+		const messages = request.body.messages;
+		expect(Array.isArray(messages)).toBe(true);
+		expect((messages as Record<string, unknown>[])[0]?.content).toBe("Dynamic request content");
+	});
+
 	it("omits eager_input_streaming on tools for Fireworks models", async () => {
 		const model = createFireworksModel();
 		const request = await captureAnthropicRequest(model, createContext());
@@ -257,6 +297,24 @@ describe("Fireworks Anthropic session affinity and tool compat", () => {
 		const lastTool = tools[tools.length - 1];
 		expect(lastTool.cache_control).toBeDefined();
 		expect((lastTool.cache_control as { type: string }).type).toBe("ephemeral");
+	});
+
+	it("sends cache_control on prompt content for native Anthropic models", async () => {
+		const model = createAnthropicModel();
+		const request = await captureAnthropicRequest(model, {
+			systemPrompt: "Stable system instructions",
+			messages: [{ role: "user", content: "Dynamic request content", timestamp: Date.now() }],
+			tools: [tool],
+		});
+
+		const system = request.body.system;
+		expect(Array.isArray(system)).toBe(true);
+		expect((system as Record<string, { type: string }>[])[0]?.cache_control).toEqual({ type: "ephemeral" });
+		const messages = request.body.messages;
+		expect(Array.isArray(messages)).toBe(true);
+		const content = (messages as Record<string, unknown>[])[0]?.content;
+		expect(Array.isArray(content)).toBe(true);
+		expect((content as Record<string, { type: string }>[])?.[0]?.cache_control).toEqual({ type: "ephemeral" });
 	});
 
 	it("sends eager_input_streaming on tools for native Anthropic models", async () => {

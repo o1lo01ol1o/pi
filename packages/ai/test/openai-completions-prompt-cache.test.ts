@@ -16,9 +16,24 @@ interface CapturedCompletionsPayload {
 	session_id?: string;
 }
 
+interface FakeChunkUsage {
+	prompt_tokens?: number;
+	completion_tokens?: number;
+	prompt_cache_hit_tokens?: number;
+	prompt_tokens_details?: { cached_tokens?: number; cache_write_tokens?: number };
+	completion_tokens_details?: { reasoning_tokens?: number };
+}
+
 const mockState = vi.hoisted(() => ({
 	lastParams: undefined as CapturedCompletionsPayload | undefined,
 	lastClientOptions: undefined as FakeOpenAIClientOptions | undefined,
+	responseHeaders: {} as Record<string, string>,
+	chunkUsage: {
+		prompt_tokens: 1,
+		completion_tokens: 1,
+		prompt_tokens_details: { cached_tokens: 0 },
+		completion_tokens_details: { reasoning_tokens: 0 },
+	} as FakeChunkUsage,
 }));
 
 vi.mock("openai", () => {
@@ -31,12 +46,7 @@ vi.mock("openai", () => {
 						async *[Symbol.asyncIterator]() {
 							yield {
 								choices: [{ delta: {}, finish_reason: "stop" }],
-								usage: {
-									prompt_tokens: 1,
-									completion_tokens: 1,
-									prompt_tokens_details: { cached_tokens: 0 },
-									completion_tokens_details: { reasoning_tokens: 0 },
-								},
+								usage: mockState.chunkUsage,
 							};
 						},
 					};
@@ -48,7 +58,7 @@ vi.mock("openai", () => {
 					};
 					promise.withResponse = async () => ({
 						data: stream,
-						response: { status: 200, headers: new Headers() },
+						response: { status: 200, headers: new Headers(mockState.responseHeaders) },
 					});
 					return promise;
 				},
@@ -69,6 +79,13 @@ describe("openai-completions prompt caching", () => {
 	beforeEach(() => {
 		mockState.lastParams = undefined;
 		mockState.lastClientOptions = undefined;
+		mockState.responseHeaders = {};
+		mockState.chunkUsage = {
+			prompt_tokens: 1,
+			completion_tokens: 1,
+			prompt_tokens_details: { cached_tokens: 0 },
+			completion_tokens_details: { reasoning_tokens: 0 },
+		};
 		delete process.env.PI_CACHE_RETENTION;
 	});
 
@@ -97,7 +114,7 @@ describe("openai-completions prompt caching", () => {
 		},
 		model: Model<"openai-completions"> = createModel(),
 	) {
-		await streamOpenAICompletions(
+		const result = await streamOpenAICompletions(
 			model,
 			{
 				systemPrompt: "sys",
@@ -109,6 +126,7 @@ describe("openai-completions prompt caching", () => {
 		return {
 			payload: mockState.lastParams,
 			headers: mockState.lastClientOptions?.defaultHeaders ?? {},
+			result,
 		};
 	}
 
@@ -226,6 +244,47 @@ describe("openai-completions prompt caching", () => {
 		expect(payload?.session_id).toBeUndefined();
 		expect(payload?.prompt_cache_key).toBeUndefined();
 		expect(headers["x-session-id"]).toBeUndefined();
+	});
+
+	it("sends session-affinity headers for Fireworks GLM 5.2 without OpenAI prompt cache fields", async () => {
+		const model = getModel("fireworks", "accounts/fireworks/models/glm-5p2");
+		if (model.api !== "openai-completions") {
+			throw new Error("Expected Fireworks GLM 5.2 to use the OpenAI-compatible API");
+		}
+
+		const { headers, payload } = await captureRequest({ sessionId: "glm-5p2-session" }, model);
+
+		expect(headers.session_id).toBe("glm-5p2-session");
+		expect(headers["x-client-request-id"]).toBe("glm-5p2-session");
+		expect(headers["x-session-affinity"]).toBe("glm-5p2-session");
+		expect(payload?.prompt_cache_key).toBeUndefined();
+		expect(payload?.prompt_cache_retention).toBeUndefined();
+	});
+
+	it("uses Fireworks prompt-cache headers for cached token accounting", async () => {
+		const model = getModel("fireworks", "accounts/fireworks/models/glm-5p2");
+		if (model.api !== "openai-completions") {
+			throw new Error("Expected Fireworks GLM 5.2 to use the OpenAI-compatible API");
+		}
+		mockState.responseHeaders = {
+			"fireworks-prompt-tokens": "100",
+			"fireworks-cached-prompt-tokens": "40",
+		};
+		mockState.chunkUsage = {
+			prompt_tokens: 100,
+			completion_tokens: 7,
+			prompt_tokens_details: { cached_tokens: 0 },
+			completion_tokens_details: { reasoning_tokens: 0 },
+		};
+
+		const { result } = await captureRequest({ sessionId: "glm-5p2-session" }, model);
+
+		expect(result.usage.input).toBe(60);
+		expect(result.usage.cacheRead).toBe(40);
+		expect(result.usage.output).toBe(7);
+		expect(result.usage.totalTokens).toBe(107);
+		expect(result.usage.cost.input).toBe((model.cost.input / 1_000_000) * 60);
+		expect(result.usage.cost.cacheRead).toBe((model.cost.cacheRead / 1_000_000) * 40);
 	});
 
 	it("omits session-affinity headers when cacheRetention is none", async () => {

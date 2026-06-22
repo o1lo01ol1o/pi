@@ -5,11 +5,14 @@ import { stream as streamAnthropic } from "../src/api/anthropic-messages.ts";
 import { getModel } from "../src/compat.ts";
 import type { Context, ToolCall } from "../src/types.ts";
 
-function createSseResponse(events: Array<{ event: string; data: string }>): Response {
+function createSseResponse(
+	events: Array<{ event: string; data: string }>,
+	headers: Record<string, string> = {},
+): Response {
 	const body = events.map(({ event, data }) => `event: ${event}\ndata: ${data}\n`).join("\n");
 	return new Response(body, {
 		status: 200,
-		headers: { "content-type": "text/event-stream" },
+		headers: { "content-type": "text/event-stream", ...headers },
 	});
 }
 
@@ -271,5 +274,80 @@ describe("Anthropic raw SSE parsing", () => {
 		expect(result.stopReason).toBe("stop");
 		expect(result.errorMessage).toBeUndefined();
 		expect(result.content).toEqual([{ type: "text", text: "Hello" }]);
+	});
+
+	it("uses Fireworks prompt-cache headers for cached token accounting", async () => {
+		const model = getModel("fireworks", "accounts/fireworks/models/kimi-k2p6");
+		const context: Context = {
+			messages: [{ role: "user", content: "Say hello.", timestamp: Date.now() }],
+		};
+		const response = createSseResponse(
+			[
+				{
+					event: "message_start",
+					data: JSON.stringify({
+						type: "message_start",
+						message: {
+							id: "msg_fireworks",
+							usage: {
+								input_tokens: 0,
+								output_tokens: 0,
+							},
+						},
+					}),
+				},
+				{
+					event: "content_block_start",
+					data: JSON.stringify({
+						type: "content_block_start",
+						index: 0,
+						content_block: { type: "text", text: "" },
+					}),
+				},
+				{
+					event: "content_block_delta",
+					data: JSON.stringify({
+						type: "content_block_delta",
+						index: 0,
+						delta: { type: "text_delta", text: "Hello" },
+					}),
+				},
+				{
+					event: "content_block_stop",
+					data: JSON.stringify({ type: "content_block_stop", index: 0 }),
+				},
+				{
+					event: "message_delta",
+					data: JSON.stringify({
+						type: "message_delta",
+						delta: { stop_reason: "end_turn" },
+						usage: {
+							input_tokens: 100,
+							output_tokens: 7,
+						},
+					}),
+				},
+				{
+					event: "message_stop",
+					data: JSON.stringify({ type: "message_stop" }),
+				},
+			],
+			{
+				"fireworks-prompt-tokens": "100",
+				"fireworks-cached-prompt-tokens": "40",
+			},
+		);
+
+		const stream = streamAnthropic(model, context, {
+			client: createFakeAnthropicClient(response),
+		});
+		const result = await stream.result();
+
+		expect(result.usage.input).toBe(60);
+		expect(result.usage.cacheRead).toBe(40);
+		expect(result.usage.output).toBe(7);
+		expect(result.usage.totalTokens).toBe(107);
+		expect(result.usage.cost.input).toBe((0.95 / 1_000_000) * 60);
+		expect(result.usage.cost.cacheRead).toBe((0.16 / 1_000_000) * 40);
 	});
 });

@@ -2112,7 +2112,12 @@ async function generateModels() {
 		if (candidate.provider === "fireworks" && candidate.id.includes("glm-5p2")) {
 			candidate.api = "openai-completions";
 			candidate.baseUrl = "https://api.fireworks.ai/inference/v1";
-			candidate.compat = { supportsStore: false, supportsDeveloperRole: false };
+			candidate.compat = {
+				supportsStore: false,
+				supportsDeveloperRole: false,
+				sendSessionAffinityHeaders: true,
+				supportsLongCacheRetention: false,
+			};
 		}
 	}
 

@@ -5,6 +5,7 @@
 ### Fixed
 
 - Added a status line when the tool output expansion is toggled ([#7180](https://github.com/earendil-works/pi/issues/7180)).
+- Fixed Nix flake builds to hydrate the generated model data from the pinned release source.
 
 ## [0.82.1] - 2026-07-25
 

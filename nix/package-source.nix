@@ -2,20 +2,25 @@
 
 let
   fromRoot = path: srcRoot + path;
+  includeOptional = [
+    "/packages/client"
+    "/packages/protocol"
+    "/packages/telemetry"
+  ];
 in
 lib.fileset.toSource {
   root = srcRoot;
-  fileset = lib.fileset.unions (map fromRoot [
-    "/.npmrc"
-    "/package-lock.json"
-    "/package.json"
-    "/packages/agent"
-    "/packages/ai"
-    "/packages/client"
-    "/packages/coding-agent"
-    "/packages/protocol"
-    "/packages/telemetry"
-    "/packages/tui"
-    "/tsconfig.base.json"
-  ]);
+  fileset = lib.fileset.unions (
+    [
+      (fromRoot "/.npmrc")
+      (fromRoot "/package-lock.json")
+      (fromRoot "/package.json")
+      (fromRoot "/packages/agent")
+      (fromRoot "/packages/ai")
+      (fromRoot "/packages/coding-agent")
+      (fromRoot "/packages/tui")
+      (fromRoot "/tsconfig.base.json")
+    ]
+    ++ (map lib.fileset.maybeMissing (map fromRoot includeOptional))
+  );
 }

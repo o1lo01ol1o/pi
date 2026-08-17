@@ -9,20 +9,32 @@ let
     else
       nodejs;
   codingAgentPackage = builtins.fromJSON (builtins.readFile (srcRoot + "/packages/coding-agent/package.json"));
-  releaseSourceHashes = {
-    "0.82.1" = "sha256-h7DgnSj10WTS2TAM2hkNNC8dY6oqmnSeCg7+4wVbzzg=";
-    "0.84.2" = "sha256-UJr6NAfjKM/xldjmyx4W28K9I8jJz/dh3vz6eLi1I40=";
+  releaseSourceSpecs = {
+    "0.79.6" = {
+      url = "https://github.com/earendil-works/pi/archive/refs/tags/v0.79.6.tar.gz";
+      hash = "sha256-ZJv4YCqt10DnuS3oCwwJ9Byix0u4CDFuiVaQd01Ryhs=";
+    };
+    "0.82.1" = {
+      url = "https://github.com/earendil-works/pi/releases/download/v0.82.1/pi-0.82.1-source.tar.gz";
+      hash = "sha256-h7DgnSj10WTS2TAM2hkNNC8dY6oqmnSeCg7+4wVbzzg=";
+    };
+    "0.84.2" = {
+      url = "https://github.com/earendil-works/pi/releases/download/v0.84.2/pi-0.84.2-source.tar.gz";
+      hash = "sha256-UJr6NAfjKM/xldjmyx4W28K9I8jJz/dh3vz6eLi1I40=";
+    };
   };
-  releaseSourceHash =
-    if builtins.hasAttr codingAgentPackage.version releaseSourceHashes then
-      releaseSourceHashes.${codingAgentPackage.version}
+  releaseSource =
+    if builtins.hasAttr codingAgentPackage.version releaseSourceSpecs then
+      let
+        source = releaseSourceSpecs.${codingAgentPackage.version};
+      in
+        pkgs.fetchzip {
+          url = source.url;
+          hash = source.hash;
+          stripRoot = true;
+        }
     else
-      throw "Missing release source hash for pi ${codingAgentPackage.version}";
-  releaseSource = pkgs.fetchzip {
-    url = "https://github.com/earendil-works/pi-mono/releases/download/v${codingAgentPackage.version}/pi-${codingAgentPackage.version}-source.tar.gz";
-    hash = releaseSourceHash;
-    stripRoot = true;
-  };
+      pkgs.lib.warn "Missing release-source metadata for pi ${codingAgentPackage.version}; using local source data." srcRoot;
   packageSource = import ./package-source.nix { inherit lib srcRoot; };
   runtimePackages = [
     pkgs.fd

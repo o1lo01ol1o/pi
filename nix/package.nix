@@ -9,6 +9,21 @@ let
     else
       nodejs;
   codingAgentPackage = builtins.fromJSON (builtins.readFile (srcRoot + "/packages/coding-agent/package.json"));
+  releaseSourceHashes = {
+    "0.82.1" = "sha256-h7DgnSj10WTS2TAM2hkNNC8dY6oqmnSeCg7+4wVbzzg=";
+    "0.84.2" = "sha256-UJr6NAfjKM/xldjmyx4W28K9I8jJz/dh3vz6eLi1I40=";
+  };
+  releaseSourceHash =
+    if builtins.hasAttr codingAgentPackage.version releaseSourceHashes then
+      releaseSourceHashes.${codingAgentPackage.version}
+    else
+      throw "Missing release source hash for pi ${codingAgentPackage.version}";
+  releaseSource = pkgs.fetchzip {
+    url = "https://github.com/earendil-works/pi-mono/releases/download/v${codingAgentPackage.version}/pi-${codingAgentPackage.version}-source.tar.gz";
+    hash = releaseSourceHash;
+    stripRoot = true;
+  };
+  packageSource = import ./package-source.nix { inherit lib srcRoot; };
   runtimePackages = [
     pkgs.fd
     pkgs.git
@@ -22,17 +37,21 @@ in
 pkgs.buildNpmPackage {
   pname = "pi";
   version = codingAgentPackage.version;
-  src = import ./package-source.nix { inherit lib srcRoot; };
+  src = packageSource;
 
-  npmDepsHash = "sha256-fVsU+TkX9XSDsb0/h53pug/oXwD8lle5blWlw6hbfDw=";
+  npmDeps = pkgs.importNpmLock { npmRoot = packageSource; };
+  npmConfigHook = pkgs.importNpmLock.npmConfigHook;
   npmFlags = [ "--ignore-scripts" ];
   npmRebuildFlags = [ "--ignore-scripts" ];
 
   nativeBuildInputs = [ pkgs.makeBinaryWrapper ];
 
   PI_NIX_ASSERT_RUNTIME_PATH = ./scripts/assert-runtime-path.cjs;
+  PI_NIX_MODEL_DATA = "${releaseSource}/packages/ai/src/providers/data";
+  PI_NIX_MODEL_DATA_OVERRIDES = ./model-data-overrides;
   PI_NIX_NODE = "${nodejs}/bin/node";
   PI_NIX_RUNTIME_PATH = lib.makeBinPath runtimePackages;
+  PI_NIX_UPDATE_MODEL_DATA_MANIFEST = ./scripts/update-model-data-manifest.cjs;
 
   buildPhase = "source ${./scripts/build-phase.sh}";
   installPhase = "source ${./scripts/install-phase.sh}";

@@ -11,7 +11,10 @@ lib.fileset.toSource {
     "/package.json"
     "/packages/agent"
     "/packages/ai"
+    "/packages/client"
     "/packages/coding-agent"
+    "/packages/protocol"
+    "/packages/telemetry"
     "/packages/tui"
     "/tsconfig.base.json"
   ]);

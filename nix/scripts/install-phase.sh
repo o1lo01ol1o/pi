@@ -30,9 +30,13 @@ copyWorkspacePackage packages/agent "$scopedModules/pi-agent-core" \
   package.json README.md CHANGELOG.md dist
 copyWorkspacePackage packages/ai "$scopedModules/pi-ai" \
   package.json README.md CHANGELOG.md bedrock-provider.d.ts bedrock-provider.js dist
+copyWorkspacePackage packages/chord "$scopedModules/chord" \
+  package.json README.md CHANGELOG.md dist
 copyWorkspacePackage packages/client "$scopedModules/pi-client" \
   package.json README.md CHANGELOG.md dist
 copyWorkspacePackage packages/protocol "$scopedModules/pi-protocol" \
+  package.json README.md CHANGELOG.md dist
+copyWorkspacePackage packages/server "$scopedModules/pi-server" \
   package.json README.md CHANGELOG.md dist
 copyWorkspacePackage packages/telemetry "$scopedModules/pi-telemetry" \
   package.json README.md CHANGELOG.md dist

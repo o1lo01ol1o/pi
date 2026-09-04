@@ -24,6 +24,7 @@ run_workspace() {
 }
 
 run_workspace packages/telemetry "@earendil-works/pi-telemetry" build
+run_workspace packages/chord "@earendil-works/chord" build
 run_workspace packages/protocol "@earendil-works/pi-protocol" build
 run_workspace packages/client "@earendil-works/pi-client" build
 npm run --workspace @earendil-works/pi-tui build
@@ -36,6 +37,7 @@ else
   node_modules/.bin/tsgo -p packages/ai/tsconfig.build.json
 fi
 run_workspace packages/agent "@earendil-works/pi-agent-core" build
+run_workspace packages/server "@earendil-works/pi-server" build
 npm run --workspace @earendil-works/pi-coding-agent build
 
 runHook postBuild

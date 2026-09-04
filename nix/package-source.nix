@@ -5,6 +5,7 @@ let
   includeOptional = [
     "/packages/client"
     "/packages/protocol"
+    "/packages/server"
     "/packages/telemetry"
   ];
 in
@@ -17,8 +18,10 @@ lib.fileset.toSource {
       (fromRoot "/package.json")
       (fromRoot "/packages/agent")
       (fromRoot "/packages/ai")
+      (fromRoot "/packages/chord")
       (fromRoot "/packages/coding-agent")
       (fromRoot "/packages/tui")
+      (fromRoot "/scripts/build-coding-agent-bundle.mjs")
       (fromRoot "/tsconfig.base.json")
     ]
     ++ (map lib.fileset.maybeMissing (map fromRoot includeOptional))

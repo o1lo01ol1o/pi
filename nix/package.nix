@@ -26,6 +26,10 @@ let
       url = "https://github.com/earendil-works/pi-mono/releases/download/v0.84.4/pi-0.84.4-source.tar.gz";
       hash = "sha256-6fIQMf5/xFXL//zkXIYcFDj/iW0vYTFu9aZIWk70+us=";
     };
+    "0.87.1" = {
+      url = "https://github.com/earendil-works/pi/releases/download/v0.87.1/pi-0.87.1-source.tar.gz";
+      hash = "sha256-KXlSWaburxruZ46qWO6Dg3gNDrFahQNT7Ud7WyfoiKk=";
+    };
   };
   releaseSource =
     if builtins.hasAttr codingAgentPackage.version releaseSourceSpecs then

@@ -10,6 +10,7 @@ chmod -R u+w packages/ai/src/providers/data
 if [ -d "$PI_NIX_MODEL_DATA_OVERRIDES" ]; then
   cp -R "$PI_NIX_MODEL_DATA_OVERRIDES"/. packages/ai/src/providers/data/
 fi
+chmod -R u+w packages/ai/src/providers/data
 if [ -f "packages/ai/src/providers/data/.manifest.json" ]; then
   "$PI_NIX_NODE" "$PI_NIX_UPDATE_MODEL_DATA_MANIFEST" packages/ai/src/providers/data
 fi
